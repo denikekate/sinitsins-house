@@ -157,6 +157,17 @@
   .check li input[type=checkbox]{width:18px;height:18px;flex:none;cursor:pointer;accent-color:var(--accent)}
   .check li span.t{flex:1;font-size:14px}
   .check li.done span.t{text-decoration:line-through;color:var(--muted)}
+  /* checklist drag + price (full view) */
+  .check-row{border-radius:10px;transition:background .12s}
+  .check-row.dragging{opacity:.4}
+  .check-row.over{background:var(--accent-soft);box-shadow:inset 0 0 0 2px var(--accent)}
+  .drag-handle{flex:none;cursor:grab;color:#c7c0b2;font-size:15px;line-height:1;user-select:none;letter-spacing:-2px}
+  .drag-handle:active{cursor:grabbing}
+  .price-sel{flex:none;border:1px solid var(--line);border-radius:999px;background:#fbf8f3;color:var(--muted);
+       font:inherit;font-size:12px;font-weight:600;padding:4px 8px;cursor:pointer;-webkit-appearance:none;appearance:none}
+  .price-sel.set{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+  .price-tag{flex:none;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-soft);
+       border-radius:999px;padding:2px 8px;white-space:nowrap}
   .fv-textarea{width:100%;min-height:200px;border:1px solid var(--line);border-radius:16px;
                padding:14px;font:inherit;font-size:14px;resize:vertical;background:#fbf8f3}
   /* link cards (Google-Docs style) */
@@ -427,9 +438,11 @@ function renderPopCheck(){
     const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!it.done;
     cb.onchange=()=>{it.done=cb.checked;save();renderPopCheck();refreshDot(current.id)};
     const sp=document.createElement('span');sp.className='t';sp.textContent=it.text;
+    li.appendChild(cb);li.appendChild(sp);
+    if(it.price){const tag=document.createElement('span');tag.className='price-tag';tag.textContent=priceLabel(it.price);li.appendChild(tag);}
     const x=document.createElement('button');x.className='x';x.textContent='×';
     x.onclick=()=>{d.checklist.splice(i,1);save();renderPopCheck();refreshDot(current.id)};
-    li.appendChild(cb);li.appendChild(sp);li.appendChild(x);ul.appendChild(li);
+    li.appendChild(x);ul.appendChild(li);
   });
 }
 function popAddCheck(){
@@ -582,17 +595,39 @@ function renderFull(id){
   fvRenderCheck();fvRenderLinks();fvRenderImgs();
 }
 // checklist
+const PRICE_BANDS=[
+  {key:'lt100',label:'< £100'},
+  {key:'100-500',label:'£100–500'},
+  {key:'500-1000',label:'£500–1000'},
+  {key:'1000-2000',label:'£1000–2000'}
+];
+function priceLabel(k){const b=PRICE_BANDS.find(x=>x.key===k);return b?b.label:''}
+let fvDragFrom=null;
 function fvRenderCheck(){
   const ul=document.getElementById('fvCheck');ul.innerHTML='';
   const d=fvData();
   d.checklist.forEach((it,i)=>{
-    const li=document.createElement('li');if(it.done)li.className='done';
+    const li=document.createElement('li');li.className='check-row'+(it.done?' done':'');
+    li.draggable=true;li.dataset.i=i;
+    li.addEventListener('dragstart',()=>{fvDragFrom=i;li.classList.add('dragging')});
+    li.addEventListener('dragend',()=>{li.classList.remove('dragging');ul.querySelectorAll('.over').forEach(n=>n.classList.remove('over'))});
+    li.addEventListener('dragover',e=>{e.preventDefault();li.classList.add('over')});
+    li.addEventListener('dragleave',()=>li.classList.remove('over'));
+    li.addEventListener('drop',e=>{e.preventDefault();li.classList.remove('over');
+      if(fvDragFrom===null||fvDragFrom===i)return;
+      const arr=d.checklist;const[moved]=arr.splice(fvDragFrom,1);arr.splice(i,0,moved);
+      fvDragFrom=null;save();fvRenderCheck();});
+    const handle=document.createElement('span');handle.className='drag-handle';handle.textContent='⠿';handle.title='Drag to reorder';
     const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!it.done;
     cb.onchange=()=>{it.done=cb.checked;save();fvRenderCheck()};
     const sp=document.createElement('span');sp.className='t';sp.textContent=it.text;
+    const sel=document.createElement('select');sel.className='price-sel'+(it.price?' set':'');
+    const o0=document.createElement('option');o0.value='';o0.textContent='£ add';sel.appendChild(o0);
+    PRICE_BANDS.forEach(b=>{const o=document.createElement('option');o.value=b.key;o.textContent=b.label;if(it.price===b.key)o.selected=true;sel.appendChild(o)});
+    sel.onchange=()=>{it.price=sel.value||null;save();fvRenderCheck()};
     const x=document.createElement('button');x.className='x';x.textContent='×';
     x.onclick=()=>{d.checklist.splice(i,1);save();fvRenderCheck()};
-    li.appendChild(cb);li.appendChild(sp);li.appendChild(x);ul.appendChild(li);
+    li.appendChild(handle);li.appendChild(cb);li.appendChild(sp);li.appendChild(sel);li.appendChild(x);ul.appendChild(li);
   });
 }
 function fvAddCheck(){
